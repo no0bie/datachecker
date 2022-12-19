@@ -1,0 +1,16 @@
+# Check an email column to confirm that all values are in email format
+check dataset:
+  - row_count != 3
+  - missing_count(bar) = 1
+  - missing_percent(bar):
+      warn: when > 20%
+      fail: when > 50%
+  - max(foo) > 2.4
+  - max_length(bar) > 3
+  - row_count:
+        warn: when < 5
+        fail: when < 2
+check dataset2:
+  - row_count = 3
+  - row_count between 10 and 1
+  - row_count not between 10 and 1
