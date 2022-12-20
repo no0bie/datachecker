@@ -1,4 +1,8 @@
 # Check an email column to confirm that all values are in email format
+check datase:
+  - row_count < 5
+  - missing_percent(a) < 2
+
 check dataset:
   - row_count != 3
   - missing_count(bar) = 1

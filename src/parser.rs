@@ -101,36 +101,50 @@ fn parse_hash(yaml: Yaml, df: &DataFrame) -> (u64, String){
 }
 
 
-pub fn parse_yaml(yaml: Yaml, df: DataFrame) {
+pub fn parse_yaml(yaml: &Yaml, df: DataFrame, check_name: &String) -> bool{
 
     for (key, values) in yaml.as_hash().expect("YAML malformed"){
-        let (check, dataset) = key.as_str()
+        let (check, check_name_yaml) = key.as_str()
         .expect("Each check has to start with a unindented string")
-        .split_once(" ").expect("Titles is");
+        .split_once(" ").expect("Checks should start with check name_of_check");
 
-        if check.cmp(&"check").is_eq() && !dataset.is_empty(){
-            let mut check_message: String = format!("Check config for {}:\n", dataset);
-            let mut passed: u64 = 0;
-            let mut total: u64 = 0;
+        match check.cmp(&"check").is_eq(){
+            true => (),
+            false => {println!("The format for checks is: \"check name_of_check\", you gave \"{} {}\"", check, check_name_yaml); continue;}
+        };
 
-            for value in values.clone().into_iter(){
-                let (int, msg): (u64, String) =  match value {
-                    Yaml::String(yaml) => parse_string(yaml, &df),
-                    Yaml::Hash(yaml) => parse_hash(Yaml::Hash(yaml), &df),
-                    _ => panic!("Seems like your yaml is malformed"),
-                };
-
-                total += 1;
-                passed += int;
-
-                check_message += &format!(" - TEST {}: {}\n", total, msg);
-            }
-            check_message += &format!("A total of {} tests were ran: {} failed. {} passsed. {}%", total, total - passed, passed, (passed as f64)/(total as f64)*100.0);
-            
-            println!("{}", check_message);
+        if check_name_yaml.cmp(&check_name).is_ne(){
+            continue;
         }
-        else{
-            println!("The format for titles is check <name>");
+
+        let mut check_message: String = format!("Check config for {}:\n", check_name_yaml);
+        let mut passed: u64 = 0;
+        let mut total: u64 = 0;
+
+        for value in values.clone().into_iter(){
+            let (int, msg): (u64, String) =  match value {
+                Yaml::String(yaml) => parse_string(yaml, &df),
+                Yaml::Hash(yaml) => parse_hash(Yaml::Hash(yaml), &df),
+                _ => panic!("Seems like your yaml is malformed"),
+            };
+
+            total += 1;
+            passed += int;
+
+            check_message += &format!(" - TEST {}: {}\n", total, msg);
         }
+
+        let pass_percent: f64 = (passed as f64)/(total as f64)*100.0;
+
+        check_message += &format!("A total of {} tests were ran: {} failed. {} passsed. {}%", total, total - passed, passed, pass_percent);
+        
+        println!("{}", check_message);
+
+        return pass_percent > 50.0;
     }
+
+    println!("Check name \"{}\" does not exist in the current yaml, current checks found in yaml: {:?}", check_name, 
+    yaml.as_hash().expect("YAML malformed").keys().into_iter().map(|yaml_keys| yaml_keys.to_owned().into_string().unwrap()).collect::<Vec<String>>());
+
+    false
 }

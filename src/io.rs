@@ -1,12 +1,9 @@
 use yaml_rust::{Yaml, YamlLoader};
 
-use std::fs::File;
+use std::io::Cursor;
 
-pub fn file_load(path: String) -> File{
-    match File::open(path){
-        Ok(file) => file,
-        Err(err) => panic!("An error has occured:\n{}", err)
-    }
+pub fn cursor_load(string_contents: String) -> Cursor<String> {
+    Cursor::new(string_contents)
 }
 
 pub fn yaml_load(yaml: String) -> Yaml{

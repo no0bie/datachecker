@@ -6,7 +6,8 @@ pub fn string_contruct(string: String, evaluated_str: String , outcome: String) 
 
 pub fn column_exists(col: &str, df: &DataFrame){
     if !df.get_column_names().contains(&col){
-        panic!("Invalid column for DataFrame");
+        panic!("Invalid column ({}) for dataFrame, columns in current dataframe: [{}]", col, df.get_columns().iter()
+        .map(|df_col| format!("{} ", df_col.name())).collect::<String>());
     }
 }
 
