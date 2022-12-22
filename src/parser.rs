@@ -2,6 +2,8 @@ use polars::{prelude::*, export::regex::bytes::Regex};
 
 use yaml_rust::Yaml;
 
+use log::{info, warn, error};
+
 use core::panic;
 
 use std::str;
@@ -110,7 +112,7 @@ pub fn parse_yaml(yaml: &Yaml, df: DataFrame, check_name: &String) -> bool{
 
         match check.cmp(&"check").is_eq(){
             true => (),
-            false => {println!("The format for checks is: \"check name_of_check\", you gave \"{} {}\"", check, check_name_yaml); continue;}
+            false => {warn!("The format for checks is: \"check name_of_check\", in the .yml is written as \"{} {}\"", check, check_name_yaml); continue;}
         };
 
         if check_name_yaml.cmp(&check_name).is_ne(){
@@ -138,12 +140,13 @@ pub fn parse_yaml(yaml: &Yaml, df: DataFrame, check_name: &String) -> bool{
 
         check_message += &format!("A total of {} tests were ran: {} failed. {} passsed. {}%", total, total - passed, passed, pass_percent);
         
-        println!("{}", check_message);
-
-        return pass_percent > 50.0;
+        return match pass_percent > 50.0 {
+            true => {info!("{}", check_message); true},
+            false => {error!("{}", check_message); false},
+        };
     }
 
-    println!("Check name \"{}\" does not exist in the current yaml, current checks found in yaml: {:?}", check_name, 
+    error!("Check name \"{}\" does not exist in the current yaml, current checks found in yaml: {:?}", check_name, 
     yaml.as_hash().expect("YAML malformed").keys().into_iter().map(|yaml_keys| yaml_keys.to_owned().into_string().unwrap()).collect::<Vec<String>>());
 
     false

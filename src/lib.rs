@@ -5,7 +5,6 @@ use std::collections::HashMap;
 use pyo3::prelude::*;
 
 use walkdir::WalkDir;
-
 mod helper;
 mod missing;
 mod numeric;
@@ -32,7 +31,6 @@ fn load_from_csv(yaml_path: String, df_path: String, check_name: String) -> PyRe
 
 #[pyfunction]
 fn load_from_directory(yaml_path: String, dir_path: String, check_name: String, regex_file_names: String) -> PyResult<HashMap<String, bool>>{
-    
     let yaml = yaml_load(yaml_path);
     let re: Regex = Regex::new(&regex_file_names).unwrap();
 
@@ -46,7 +44,7 @@ fn load_from_directory(yaml_path: String, dir_path: String, check_name: String, 
                 &check_name
             );
             
-            files.insert(file.file_name().to_str().unwrap().to_string(), bool);
+            files.insert(file.path().to_str().unwrap().to_string(), bool);
         }
     }
     Ok(files)
@@ -54,6 +52,7 @@ fn load_from_directory(yaml_path: String, dir_path: String, check_name: String, 
 
 #[pymodule]
 fn datachecker(_py: Python<'_>, m: &PyModule) -> PyResult<()> {
+    pyo3_log::init();
     m.add_function(wrap_pyfunction!(load_from_csv_string, m)?)?;
     m.add_function(wrap_pyfunction!(load_from_directory, m)?)?;
     m.add_function(wrap_pyfunction!(load_from_csv, m)?)?;

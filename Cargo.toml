@@ -10,7 +10,9 @@ name = "datachecker"
 crate-type = ["cdylib"]
 
 [dependencies]
+log = "0.4.17"
 polars = { version = "0.25.1", features = ["decompress", "json"] }
 pyo3 = "0.17.3"
+pyo3-log = "0.7.0"
 walkdir = "2.3.2"
 yaml-rust = "0.4.5"
