@@ -1,10 +1,18 @@
 use polars::prelude::*;
 use crate::helper::{eval, column_exists};
 
+pub fn avg(col: &str, cond_op: &str, cond: &str, df: &DataFrame) -> (bool, String){
+    column_exists(&col, &df);
+
+    let avg_val: f64 = df[col].mean().expect("Expected a number");
+
+    eval(avg_val, cond_op, cond)
+}
+
 pub fn max(col: &str, cond_op: &str, cond: &str, df: &DataFrame) -> (bool, String){
     column_exists(&col, &df);
 
-    let max_val: f64 = df[col].max::<f64>().expect("Expected a number");
+    let max_val: f64 = df[col].max().expect("Expected a number");
 
     eval(max_val, cond_op, cond)
 }
@@ -12,7 +20,7 @@ pub fn max(col: &str, cond_op: &str, cond: &str, df: &DataFrame) -> (bool, Strin
 pub fn max_length(col: &str, cond_op: &str, cond: &str, df: &DataFrame) -> (bool, String){
     column_exists(&col, &df);
 
-    let max_val: f64 = (df.max().column(col).unwrap().get(0).to_string().len() as f64) - 2.0;
+    let max_val = (df.max().column(col).unwrap().get(0).to_string().len() as f64) - 2.0;
 
     eval(max_val, cond_op, cond)  
 }

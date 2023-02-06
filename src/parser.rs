@@ -39,6 +39,9 @@ fn parse_string(string: String, df: &DataFrame) -> (u64, String){
 
     (_outcome, _evaluated_str) = match check {
         "row" | "columns" => numeric::count(check, cond_op, cond, df), // Exceptional case where check = row or column
+        
+        "avg" => numeric::avg(col, cond_op, cond, df),
+
         "max" => numeric::max(col, cond_op, cond, df),
         "max_length" => numeric::max_length(col, cond_op, cond, df),
 
