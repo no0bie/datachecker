@@ -1,7 +1,7 @@
 use polars::prelude::*;
 
 pub fn string_contruct(string: String, evaluated_str: String , outcome: String) -> String{
-    format!("{} ({}) [{}]", string, evaluated_str, outcome)
+    format!(" - {} ({}) [{}]", string, evaluated_str, outcome)
 }
 
 pub fn column_exists(col: &str, df: &DataFrame){
@@ -53,6 +53,6 @@ pub fn eval(numeric: f64, cond_op: &str, cond: &str) -> (bool, String){
         _ => false,
     };
 
-    (result, format!("{} {} {}", numeric, cond_op, cond))
+    (result, format!("{} {} {}", numeric, if !result {format!("!{}", cond_op)} else {cond_op.to_string()} , cond))
 
 }
