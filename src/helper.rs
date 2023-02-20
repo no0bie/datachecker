@@ -1,7 +1,11 @@
 use polars::prelude::*;
 
-pub fn string_contruct(string: String, evaluated_str: String , outcome: String) -> String{
-    format!(" - {} ({}) [{}]", string, evaluated_str, outcome)
+pub fn string_contruct(string: String, evaluated_str: String , outcome: bool) -> String{
+    if outcome{
+        return format!(" - {} ({}) [PASSED]", string, evaluated_str)
+    }
+    format!(" - {} ({}) [FAILED]", string, evaluated_str)
+    
 }
 
 pub fn column_exists(col: &str, df: &DataFrame){
@@ -9,6 +13,11 @@ pub fn column_exists(col: &str, df: &DataFrame){
         panic!("Invalid column ({}) for dataFrame, columns in current dataframe: [{}]", col, df.get_columns().iter()
         .map(|df_col| format!("{} ", df_col.name())).collect::<String>());
     }
+}
+
+pub fn check_div(n1: u64, n2: u64) -> Option<f64>{
+    if n2 == 0{return None}
+    return Some(n1 as f64 / n2 as f64)
 }
 
 pub fn eval(numeric: f64, cond_op: &str, cond: &str) -> (bool, String){

@@ -1,8 +1,9 @@
+use log::warn;
 use polars::{prelude::*, export::regex::bytes::Regex};
 
 use yaml_rust::Yaml;
 
-use log::{info, warn, error};
+use log::{info, error};
 use yaml_rust::YamlEmitter;
 use yaml_rust::YamlLoader;
 
@@ -14,13 +15,11 @@ use crate::missing;
 use crate::numeric;
 use crate::helper::string_contruct;
 use crate::schema::match_cond;
+use crate::helper::check_div;
 
 fn parse_string(string: String, df: &DataFrame) -> (u64, String){
-
-    let mut _outcome: bool = false;
-    let mut _evaluated_str: String = String::new();
     
-    let malformed: &str = &format!("Malformed check, expected 'check(column_name) operator condition' or 'row/colums_check operator condition' got : {}", string);
+    let malformed: &str = &format!("Malformed check, expected \"check_type operator condition\" got: \"{}\"", string);
 
     let mut _regex: Regex = Regex::new(r"").unwrap(); 
 
@@ -33,14 +32,12 @@ fn parse_string(string: String, df: &DataFrame) -> (u64, String){
 
     let re_captures = _regex.captures(string.as_bytes()).expect(malformed);
     
-    let check  : &str = str::from_utf8(re_captures.get(1).expect(malformed).as_bytes()).expect("Something went wrong");
-    let col    : &str = str::from_utf8(re_captures.get(2).expect(malformed).as_bytes()).expect("Something went wrong");
-    let cond_op: &str = str::from_utf8(re_captures.get(3).expect(malformed).as_bytes()).expect("Something went wrong");
-    let cond   : &str = str::from_utf8(re_captures.get(4).expect(malformed).as_bytes()).expect("Something went wrong");
+    let check  : &str = str::from_utf8(re_captures.get(1).expect(&format!("{}, missing check_type", malformed)).as_bytes()).expect("Something went wrong");
+    let col    : &str = str::from_utf8(re_captures.get(2).expect(&format!("{}, missing the column that you want to check", malformed)).as_bytes()).expect("Something went wrong");
+    let cond_op: &str = str::from_utf8(re_captures.get(3).expect(&format!("{}, missing operator", malformed)).as_bytes()).expect("Something went wrong");
+    let cond   : &str = str::from_utf8(re_captures.get(4).expect(&format!("{}, missing condition", malformed)).as_bytes()).expect("Something went wrong");
 
-     // println!("{:?} {:?} {:?} {:?}", check, col, cond_op, cond); // --- PRINT ALL REGEX ---
-
-    (_outcome, _evaluated_str) = match check {
+    let (outcome, evaluated_str) = match check {
         "row" | "columns" => numeric::count(check, cond_op, cond, df), // Exceptional case where check = row or column
         
         "avg" => numeric::avg(col, cond_op, cond, df),
@@ -54,18 +51,16 @@ fn parse_string(string: String, df: &DataFrame) -> (u64, String){
         _ => panic!("Not implemented yet")  
     };
 
-    if _outcome {
-        return (_outcome as u64, string_contruct(string, _evaluated_str, String::from("PASSED")));
-    }
-    (_outcome as u64, string_contruct(string, _evaluated_str, String::from("FAILED"), ))
-
+    (outcome as u64, string_contruct(string, evaluated_str, outcome))
 }
-
 
 fn parse_hash(yaml: Yaml, df: &DataFrame) -> (u64, String){
     let mut  fail_ap: bool = false;
     let mut no_change: bool = true;
     let mut ret: (u64, String) = (0, String::from("CHECK INEXISTENT"));
+
+    // let key = yaml.as_hash().unwrap().keys().next().unwrap().as_str().expect("Each check has to start with a unindented string");
+    // let value = yaml.as_hash().unwrap().keys().next().unwrap();
 
     for (key, values) in yaml.as_hash().unwrap(){
         let key = key.as_str().expect("Each check has to start with a unindented string");
@@ -155,56 +150,51 @@ fn parse_hash(yaml: Yaml, df: &DataFrame) -> (u64, String){
     ret 
 }
 
-
-
-pub fn parse_yaml(yaml: &Yaml, df: DataFrame, check_name: &String) -> bool{
-
-    for (key, values) in yaml.as_hash().expect("YAML malformed"){
-        let (check, check_name_yaml) = key.as_str()
-        .expect("Each check has to start with a unindented string")
-        .split_once(" ").expect("Checks should start with check name_of_check");
-
-        match check.cmp(&"check").is_eq(){
-            true => (),
-            false => {warn!("The format for checks is: \"check name_of_check\", in the .yml is written as \"{} {}\"", check, check_name_yaml); continue;}
-        };
-
-        if check_name_yaml.cmp(&check_name).is_ne(){
-            continue;
-        }
-
-        let mut check_message: String = format!("CHECK CONFIG FOR {}:\n", check_name_yaml.to_uppercase());
-        let mut passed: u64 = 0;
+pub fn parse_yaml(yaml: &Yaml, df: DataFrame, check_name: &String) -> Option<bool>{
+    let parse: Option<bool> = yaml.as_hash().expect("YAML malformed")
+    .iter().filter(|(key, _)| key.as_str().expect("YAML malformed").ends_with(check_name))
+    .map(|(_, check_config)| {
+        let mut check_message: String = format!("CHECK CONFIG FOR {}:\n", check_name.to_uppercase());
         let mut total: u64 = 0;
 
-        for value in values.clone().into_iter(){
-            let (int, msg): (u64, String) =  match value {
-                Yaml::String(yaml) => parse_string(yaml, &df),
-                Yaml::Hash(yaml) => parse_hash(Yaml::Hash(yaml), &df),
-                _ => panic!("Seems like your yaml is malformed"),
-            };
+        let passed: u64 = check_config.as_vec().unwrap_or(&vec![])
+        .iter().filter_map(|check| {
+            match check {
+                Yaml::String(yaml) => Some(parse_string(yaml.to_owned(), &df)),
+                Yaml::Hash(yaml) => Some(parse_hash(Yaml::Hash(yaml.to_owned()), &df)),
+                _ => {warn!("Ignored check: {:?}, expected a String() or Hash(), check for yaml formatting", check);return None},
+            }
+        })
+        .map(|(check_bool, check_msg)| {total+=1;check_message+=&format!("  - TEST {}:\n    {}\n", total, check_msg);check_bool})
+        .sum::<u64>();
 
-            total += 1;
-            passed += int;
-
-            check_message += &format!("  - TEST {}:\n    {}\n", total, msg);
-        }
-
-        let pass_percent: f64 = (passed as f64)/(total as f64)*100.0;
-
-        check_message += &format!("  - A total of {} tests were ran:\n    - {} failed.\n    - {} passsed.\n    - {}%", total, total - passed, passed, pass_percent);
+        check_message += &format!("  - A total of {} tests were ran:\n    - {} failed.\n    - {} passsed.\n    - {}%", total, total - passed, passed, check_div(passed, total).unwrap_or(0.0)*100.0);
 
         let mut out_str: String = String::new();
         YamlEmitter::new(&mut out_str).dump(&YamlLoader::load_from_str(&check_message).unwrap()[0]).unwrap();
-        
-        return match pass_percent > 50.0 {
-            true => {info!("{}", out_str); true},
-            false => {error!("{}", out_str); false},
-        };
+
+        info!("{}", out_str);
+
+        return passed > total.wrapping_div(2)
+
+  }).next();
+
+    match parse {
+        None => {
+            error!("Check name \"{}\" does not exist in the current yaml, current checks found in yaml: {:?}", check_name, 
+                yaml.as_hash().unwrap().keys()
+                .filter_map(|k| { 
+                    let check = k.as_str().unwrap().split_once(" "); 
+                    if check.is_none() {
+                        error!("All checks must start with \"check check_name\". You are missing a space in check: \"{}\"", k.as_str().unwrap());
+                        return None
+                    } 
+                    else {
+                        return Some(check.unwrap().1)
+                    }
+                }).collect::<Vec<&str>>());
+                return None
+            },
+        _ => return parse, 
     }
-
-    error!("Check name \"{}\" does not exist in the current yaml, current checks found in yaml: {:?}", check_name, 
-    yaml.as_hash().expect("YAML malformed").keys().into_iter().map(|yaml_keys| yaml_keys.to_owned().into_string().unwrap()).collect::<Vec<String>>());
-
-    false
 }
