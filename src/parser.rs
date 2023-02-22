@@ -14,6 +14,7 @@ use std::str;
 use crate::missing;
 use crate::numeric;
 use crate::helper::string_contruct;
+use crate::schema::like_file;
 use crate::schema::match_cond;
 use crate::helper::check_div;
 
@@ -55,99 +56,109 @@ fn parse_string(string: String, df: &DataFrame) -> (u64, String){
 }
 
 fn parse_hash(yaml: Yaml, df: &DataFrame) -> (u64, String){
-    let mut  fail_ap: bool = false;
     let mut no_change: bool = true;
-    let mut ret: (u64, String) = (0, String::from("CHECK INEXISTENT"));
+    let mut ret: (u64, String) = (0, String::from("ERROR, SOMETHING WENT WRONG, CHECK IGNORED"));
 
-    // let key = yaml.as_hash().unwrap().keys().next().unwrap().as_str().expect("Each check has to start with a unindented string");
-    // let value = yaml.as_hash().unwrap().keys().next().unwrap();
+    let key = yaml.as_hash().unwrap().keys().next().unwrap().as_str().expect("Each check has to start with a unindented string");
+    let values_raw = yaml.as_hash().unwrap().values().next().unwrap();
 
-    for (key, values) in yaml.as_hash().unwrap(){
-        let key = key.as_str().expect("Each check has to start with a unindented string");
+    if let Yaml::Hash(values) = values_raw {
+        for (cond_types, conditions) in values.iter().filter(|(cond_types, _)| {
+            if let Yaml::String(cond_type) = cond_types {
+                if ["warn", "fail"].contains(&cond_type.to_lowercase().as_str()){
+                    return true
+                }
+                warn!("The only valid conditions are warn and fail got {}, skipping, ", cond_type);
+            }
+            else {
+                warn!("Expected a String() got {:?}, skipping", cond_types);
+            }   
+            return false;
+            }){
 
-        for (cond_types, condition) in values.as_hash().expect("YAML is not properly formatted"){
-
-            let (cond_type, types) = match (cond_types, condition) {
-                (Yaml::String(cond_type_parsed), Yaml::String(_condition_parsed)) => (cond_type_parsed, "simple"),
-                (Yaml::String(cond_type_parsed), Yaml::Hash(_condition_parsed)) => (cond_type_parsed, "complex"),
-                _ => panic!("Type and condition must be strings")
-            };
-
-            if types.cmp("simple").is_eq() {
-
-                let condition = condition.as_str().expect(&format!("Condition malformed: {:?}", condition));
-
+            if let (Yaml::String(cond_type), Yaml::String(condition)) = (cond_types, conditions) {                
                 let (ret_temp, parse_string_temp): (u64, String) = parse_string(format!("{} {}", key.trim(), condition.replace("when", "").trim()), &df);
+    
                 ret.0 = ret_temp;
-
-                let ret_temp: bool = ret_temp == 0;
-
+    
                 let parsed_condition: &str = str::from_utf8(Regex::new(r"\s\((.*)\)").unwrap()
                 .find(parse_string_temp.as_bytes()).unwrap()
                 .as_bytes()).unwrap().trim();
-
-                if ret_temp && no_change{
+    
+                if ret_temp == 0 && no_change{
                     ret.1 = format!("- {} {} {} {} [PASSED]", key, cond_type, condition, parsed_condition);
                 }
-                else if !ret_temp{
+    
+                else if !(ret_temp == 0) {
                     ret.1 = format!(" - {} {} {} {} [{}ED]", key, cond_type, condition, parsed_condition, cond_type.to_uppercase());
                     no_change = false;
                     if cond_type.cmp(&"fail".to_string()).is_eq(){
-                        fail_ap = true;
                         break;
                     }
                 }
-                
             }
-            else if types.cmp("complex").is_eq() {
-                let condition = condition.as_hash().expect(&format!("Condition malformed: {:?}", condition));
-
+            else if let (Yaml::String(cond_type), Yaml::Hash(condition)) = (cond_types, conditions) {
+    
                 let mut all_parsed: String = String::from("");
-
                 let mut times = 0;
-                let mut passed = 0; 
-
-                for (check_str, cols_to_check) in condition {
+    
+                let passed: u64 = condition.iter().map(|(check_str, cols_to_check)| {
                     let check_str = check_str.as_str().expect("Malformed YAML, expected string got something else, check indentation");
                     let regex = Regex::new(r"^when\s(.*)\scolumn\s(.*)$").unwrap().captures(check_str.as_bytes()).expect(&format!("Malformed schema check got {}", check_str));
                     
                     let cond_type_col  : &str = str::from_utf8(regex.get(1).expect(&format!("Malformed schema check got {}", check_str)).as_bytes()).expect("Something went wrong");
                     let check          : &str = str::from_utf8(regex.get(2).expect(&format!("Malformed schema check got {}", check_str)).as_bytes()).expect("Something went wrong");
-
+    
                     let cols_to_check = cols_to_check.as_vec().expect(&format!("Expected array got {:?}, check yaml indentation", cols_to_check)).to_owned();
-
+    
                     let (ret_temp, parse_string_temp): (u64, String) = match_cond(cond_type_col, check, cols_to_check, df);
-
-                    all_parsed += &&format!("{}\n", parse_string_temp);
-
-                    passed += ret_temp;
+    
+                    all_parsed += &format!("{}\n", parse_string_temp);
                     times += 1;
-
-                }
-
+                    ret_temp
+                }).sum();
                 // All_parsed has yaml formatting, so if we want to add to yaml we might need to go inside schema.rs
-
+    
                 if times == passed && no_change{
                     ret.1 = format!("- schema [PASSED]:\n{}", all_parsed);
                     no_change = false;
                 }
-
+    
                 else if times != passed{
                     ret.1 = format!("- schema [{}ED]:\n{}", cond_type.to_uppercase(), all_parsed);
                     no_change = false;
                     if cond_type.cmp(&"fail".to_string()).is_eq(){
-                        fail_ap = true;
                         break;
                     }
                 }
             }
-        }
-
-        if fail_ap{
-            break
+            else {
+                return (0 ,format!("Expected String() Hash() or String() String(), got {:?} {:?}", cond_types, conditions));
+            }
         }
     }
-    ret 
+    else if let Yaml::Array(checks) = values_raw {
+        let mut times = 0;
+        let mut all_parsed = String::from("");
+
+        let passed: u64 = checks.iter().map(|check| {
+            let check: &str = check.as_str().expect(&format!("Expected String() got {:?}", check));
+            let (passed, parse_string_temp): (u64, String) = like_file(check, CsvReader::from_path(key.replace("schema like", "").trim()).unwrap().finish().unwrap(), df);
+            
+            all_parsed += &format!("{}\n", parse_string_temp);
+            times += 1;
+
+            passed
+        }).sum();
+
+        ret.0 = (times == passed) as u64;
+        ret.1 = format!("- {} [{}]:\n{}", key, ["FAILED", "PASSED"][ret.0 as usize], all_parsed);
+    }
+    else {
+        println!("{:?}", values_raw);
+    }
+
+    ret
 }
 
 pub fn parse_yaml(yaml: &Yaml, df: DataFrame, check_name: &String) -> Option<bool>{
@@ -174,27 +185,25 @@ pub fn parse_yaml(yaml: &Yaml, df: DataFrame, check_name: &String) -> Option<boo
         YamlEmitter::new(&mut out_str).dump(&YamlLoader::load_from_str(&check_message).unwrap()[0]).unwrap();
 
         info!("{}", out_str);
+        // info!("{}", check_message);
 
         return passed > total.wrapping_div(2)
 
   }).next();
-
-    match parse {
-        None => {
-            error!("Check name \"{}\" does not exist in the current yaml, current checks found in yaml: {:?}", check_name, 
-                yaml.as_hash().unwrap().keys()
-                .filter_map(|k| { 
-                    let check = k.as_str().unwrap().split_once(" "); 
-                    if check.is_none() {
-                        error!("All checks must start with \"check check_name\". You are missing a space in check: \"{}\"", k.as_str().unwrap());
-                        return None
-                    } 
-                    else {
-                        return Some(check.unwrap().1)
-                    }
-                }).collect::<Vec<&str>>());
-                return None
-            },
-        _ => return parse, 
+    
+    if parse == None{
+        error!("Check name \"{}\" does not exist in the current yaml, current checks found in yaml: {:?}", check_name, 
+            yaml.as_hash().unwrap().keys()
+            .filter_map(|k| { 
+                let check = k.as_str().unwrap().split_once(" "); 
+                if check.is_none() {
+                    error!("All checks must start with \"check check_name\". You are missing a space in check: \"{}\"", k.as_str().unwrap());
+                    return None
+                } 
+                else {
+                    return Some(check.unwrap().1)
+                }
+            }).collect::<Vec<&str>>());
     }
+    parse
 }
