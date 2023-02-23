@@ -1,7 +1,5 @@
 use core::panic;
 
-use itertools::Itertools;
-
 use polars::prelude::*;
 use yaml_rust::Yaml;
 
@@ -28,24 +26,16 @@ pub fn match_cond(cond_type: &str, check: &str, columns: Vec<Yaml>, df: &DataFra
 }
 
 fn check_columns(cond_type: &str, columns: Vec<Yaml>, df: &DataFrame) -> (String, usize, usize){
-    let col_str= columns.iter().map(|col| col.as_str().expect(&format!("Expected string and got {:?} check indentation", col)).to_string());
-    let mut at_least_one_exists = false; 
+    let (mut existing, mut missing): (String, String) = (String::new(), String::new());
 
-    // Returns a Vector with missing and existing columns in our dataframe
-    // let columns Vec<String> = vec!["existing1 existing2 ... ", "missing1 missing2 ... "]
-    let columns_parsed: Vec<String> = col_str.filter_map(|col| {
-        if let Ok(_col) = df.column(&col) {
-            at_least_one_exists = true;
-            return Some((0, format!("{} ", col)))
+    columns.iter().filter_map(|col| col.as_str()).for_each(|col|{
+        if let Ok(_col) = df.column(col){
+            existing.push_str(&format!("{} ", col));
         }
-        return Some((1, format!("{} ", col)))
-    })
-    .group_by(|x| x.0)
-    .into_iter().map(|(_, i)| i.map(|ii| ii.1).collect::<String>()).collect::<Vec<String>>();
-
-    let default: String = String::from("");
-    let existing = columns_parsed.get(!at_least_one_exists as usize).unwrap_or(&default); 
-    let missing = columns_parsed.get(at_least_one_exists as usize).unwrap_or(&default);
+        else{
+            missing.push_str(&format!("{} ", col));
+        }
+    });
 
     let msg = format!("      - {}:\n         - missing = [ {}]\n         - found = [ {}]", cond_type, missing, existing);
 

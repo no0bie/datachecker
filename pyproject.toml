@@ -1,0 +1,37 @@
+[build-system]
+requires = ["maturin>=0.14,<0.15"]
+build-backend = "maturin"
+
+[project]
+name = "datachecker"
+description = "Blazingly fast datachecker library"
+requires-python = ">=3.7"
+
+classifiers = [
+  "Development Status :: 5 - Production/Stable",
+  "Environment :: Console",
+  "Intended Audience :: Science/Research",
+  "License :: OSI Approved :: MIT License",
+  "Operating System :: OS Independent",
+  "Programming Language :: Python",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3 :: Only",
+  "Programming Language :: Python :: 3.7",
+  "Programming Language :: Python :: 3.8",
+  "Programming Language :: Python :: 3.9",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Rust",
+  "Topic :: Scientific/Engineering",
+]
+
+[[tool.mypy.overrides]]
+module = ["IPython.*"]
+follow_imports = "skip"
+
+[[tool.mypy.overrides]]
+module = ["datachecker.*"]
+warn_return_any = false
+
+[tool.maturin]
+features = ["pyo3/extension-module"]
