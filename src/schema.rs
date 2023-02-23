@@ -53,21 +53,28 @@ fn check_columns(cond_type: &str, columns: Vec<Yaml>, df: &DataFrame) -> (String
 }
 
 fn check_types(df_base: DataFrame, df: &DataFrame) -> (u64, String){
+    let msg;
 
-    let msg = format!("      - types:\n{}", 
-    df.get_columns().iter().filter_map(|checking_col|{
+    let errs: String = df.get_columns().iter().filter_map(|checking_col|{
         if let Ok(col_df_base) = df_base.column(checking_col.name()) {
             if col_df_base.dtype() == checking_col.dtype(){
                 // Ignore them ?
-                return Some(format!("         - {} OK -> {}\n", checking_col.name(), checking_col.dtype()));
+               //  return Some(format!("         - {} OK -> {}\n", checking_col.name(), checking_col.dtype()));
             }
             else{
                 return Some(format!("         - {} ERR -> GOT '{}' EXPECTED '{}'\n", checking_col.name(), checking_col.dtype(), col_df_base.dtype()));
             }
         }
         return None;
+    }).collect::<String>();
 
-    }).collect::<String>());
+    if errs.is_empty() {
+        msg = format!("      - types:\n         - All types match!");
+    }
+    else {
+        msg = format!("      - types:\n{}", errs);
+    }
 
-    return (0, msg);
+
+    return ((msg.split("\n").count() - 2 <= 0 )as u64, msg);
 }

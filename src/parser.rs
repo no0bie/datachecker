@@ -161,7 +161,7 @@ fn parse_hash(yaml: Yaml, df: &DataFrame) -> (u64, String){
     ret
 }
 
-pub fn parse_yaml(yaml: &Yaml, df: DataFrame, check_name: &String) -> Option<bool>{
+pub fn parse_yaml(yaml: &Yaml, df: DataFrame, check_name: &String) -> pyo3::PyResult<bool> {
     let parse: Option<bool> = yaml.as_hash().expect("YAML malformed")
     .iter().filter(|(key, _)| key.as_str().expect("YAML malformed").ends_with(check_name))
     .map(|(_, check_config)| {
@@ -187,12 +187,14 @@ pub fn parse_yaml(yaml: &Yaml, df: DataFrame, check_name: &String) -> Option<boo
         info!("{}", out_str);
         // info!("{}", check_message);
 
-        return passed > total.wrapping_div(2)
+        return passed >= total.wrapping_div(2)
 
   }).next();
-    
-    if parse == None{
-        error!("Check name \"{}\" does not exist in the current yaml, current checks found in yaml: {:?}", check_name, 
+
+    match parse {
+        Some(result) => Ok(result),
+        None => {
+            error!("Check name \"{}\" does not exist in the current yaml, current checks found in yaml: {:?}", check_name, 
             yaml.as_hash().unwrap().keys()
             .filter_map(|k| { 
                 let check = k.as_str().unwrap().split_once(" "); 
@@ -204,6 +206,23 @@ pub fn parse_yaml(yaml: &Yaml, df: DataFrame, check_name: &String) -> Option<boo
                     return Some(check.unwrap().1)
                 }
             }).collect::<Vec<&str>>());
+            return Err(pyo3::exceptions::PyTypeError::new_err(format!("TypeError: Invalid check, {}", check_name)));
+        }      
     }
-    parse
+    
+    // if parse == None{
+    //     error!("Check name \"{}\" does not exist in the current yaml, current checks found in yaml: {:?}", check_name, 
+    //         yaml.as_hash().unwrap().keys()
+    //         .filter_map(|k| { 
+    //             let check = k.as_str().unwrap().split_once(" "); 
+    //             if check.is_none() {
+    //                 error!("All checks must start with \"check check_name\". You are missing a space in check: \"{}\"", k.as_str().unwrap());
+    //                 return None
+    //             } 
+    //             else {
+    //                 return Some(check.unwrap().1)
+    //             }
+    //         }).collect::<Vec<&str>>());
+    // }
+    // parse
 }
