@@ -1,6 +1,7 @@
 use log::warn;
 use polars::{prelude::*, export::regex::bytes::Regex};
 
+use pyo3::pyclass;
 use yaml_rust::Yaml;
 
 use log::{info, error};
@@ -17,6 +18,26 @@ use crate::helper::string_contruct;
 use crate::schema::like_file;
 use crate::schema::match_cond;
 use crate::helper::check_div;
+
+/// Beers object:
+/// passed (int): Number of successfull or warned tests
+/// failed (int): Number of failed tests
+/// total (int): Total number of check performed
+/// log (str): Contains the log of all the tests, can also be displayed if true is passed to logging in functions
+/// result (bool): True if it passed >= 50% of tests, otherwise false 
+#[pyclass(name= "Beers")]
+pub struct CheckStruct {
+    #[pyo3(get)]
+    passed: u64,
+    #[pyo3(get)]
+    failed: u64,
+    #[pyo3(get)]
+    total: u64,
+    #[pyo3(get)]
+    log: String,
+    #[pyo3(get)]
+    result: bool,
+}
 
 fn parse_string(string: String, df: &DataFrame) -> (u64, String){
     
@@ -161,8 +182,8 @@ fn parse_hash(yaml: Yaml, df: &DataFrame) -> (u64, String){
     ret
 }
 
-pub fn parse_yaml(yaml: &Yaml, df: DataFrame, check_name: &String) -> pyo3::PyResult<bool> {
-    let parse: Option<bool> = yaml.as_hash().expect("YAML malformed")
+pub fn parse_yaml(yaml: &Yaml, df: DataFrame, check_name: &String) -> pyo3::PyResult<CheckStruct> {
+    let parse: Option<CheckStruct> = yaml.as_hash().expect("YAML malformed")
     .iter().filter(|(key, _)| key.as_str().expect("YAML malformed").ends_with(check_name))
     .map(|(_, check_config)| {
         let mut check_message: String = format!("CHECK CONFIG FOR {}:\n", check_name.to_uppercase());
@@ -179,15 +200,22 @@ pub fn parse_yaml(yaml: &Yaml, df: DataFrame, check_name: &String) -> pyo3::PyRe
         .map(|(check_bool, check_msg)| {total+=1;check_message+=&format!("  - TEST {}:\n    {}\n", total, check_msg);check_bool})
         .sum::<u64>();
 
-        check_message += &format!("  - A total of {} tests were ran:\n    - {} failed.\n    - {} passsed.\n    - {}%", total, total - passed, passed, check_div(passed, total).unwrap_or(0.0)*100.0);
+        let total_passed: f64 = check_div(passed, total).unwrap_or(0.0)*100.0;
+
+        check_message += &format!("  - A total of {} tests were ran:\n    - {} failed.\n    - {} passsed.\n    - {}%", total, total - passed, passed, total_passed);
 
         let mut out_str: String = String::new();
         YamlEmitter::new(&mut out_str).dump(&YamlLoader::load_from_str(&check_message).unwrap()[0]).unwrap();
 
         info!("{}", out_str);
-        // info!("{}", check_message);
 
-        return passed >= total.wrapping_div(2)
+        return CheckStruct{
+            passed,
+            failed: total - passed,
+            total,
+            log: out_str,
+            result: total_passed >= 50.0,
+        }
 
   }).next();
 
@@ -209,20 +237,4 @@ pub fn parse_yaml(yaml: &Yaml, df: DataFrame, check_name: &String) -> pyo3::PyRe
             return Err(pyo3::exceptions::PyTypeError::new_err(format!("TypeError: Invalid check, {}", check_name)));
         }      
     }
-    
-    // if parse == None{
-    //     error!("Check name \"{}\" does not exist in the current yaml, current checks found in yaml: {:?}", check_name, 
-    //         yaml.as_hash().unwrap().keys()
-    //         .filter_map(|k| { 
-    //             let check = k.as_str().unwrap().split_once(" "); 
-    //             if check.is_none() {
-    //                 error!("All checks must start with \"check check_name\". You are missing a space in check: \"{}\"", k.as_str().unwrap());
-    //                 return None
-    //             } 
-    //             else {
-    //                 return Some(check.unwrap().1)
-    //             }
-    //         }).collect::<Vec<&str>>());
-    // }
-    // parse
 }

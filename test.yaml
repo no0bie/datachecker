@@ -18,3 +18,34 @@ check dataset2:
   - row_count = 3
   - row_count between 10 and 1
   - row_count not between 10 and 1
+
+check datasetter:
+check dataset3:
+  - row_count != 5
+  - [a, b, c]
+  - missing_count(bar) = 1
+  - max(foo) > 2.4
+  - max_length(bar) > 3
+  - row_count:
+      warn: when < 5
+      fail: when < 2
+check dataset4:
+  - row_count = 4
+  - avg(foo) > 2.4
+  - row_count:
+      fail: when < 5
+      warn: when < 2
+
+  - schema:
+      warn:
+        when forbidden column present: [hola, foo]
+        when required column missing: [foo, bar]
+      fail:
+        when forbidden column present: [gucci, foo]
+  - schema like t.csv.gz:
+      - columns
+      - types        
+
+  - row_count:
+      warn: when < 5
+      fail: when < 2
