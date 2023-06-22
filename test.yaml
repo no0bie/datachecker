@@ -1,7 +1,17 @@
 # Check an email column to confirm that all values are in email format
+check crypto:
+  - row_count:
+      warn: when > 1000000
+      fail: when < 2
+  - row_count between 10 and 20
+  - columns_count between 100 and 1
+  - schema like /mnt/CryptoHist/cleaned/intrade/HUOBI/ONE-USDT-PERP/2023-01-30_00.00.00__2023-01-31_00.00.00.csv.gz:
+    - columns
+    - types
+
 check datase:
   - row_count < 5
-  - missing_percent(a) < 2
+  - missing_percent(gucci) < 2
 
 check dataset:
   - row_count != 3
